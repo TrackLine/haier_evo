@@ -1505,7 +1505,10 @@ class HaierWM(HaierDevice):
 
         # Собираем код программы (attr name "0") -> русское имя
         code_to_human: dict[str, str] = {}
-        for item in data.get("businessAttributes", []) or []:
+        biz = (data.get("smartDeviceControl", {}) or {}).get("businessAttributes")
+        if not biz:
+            biz = data.get("businessAttributes", []) or []
+        for item in biz:
             wash_name = str(item.get("name") or "")
             attrs = (((item.get("commandParameters") or {}).get("attrNameList") or []))
             program_attr = next((a for a in attrs if str(a.get("name")) == "0"), None)
@@ -1525,28 +1528,12 @@ class HaierWM(HaierDevice):
         attr = self.config.get_attr_by_name("program")
         if not attr:
             return
-        # Сохраняем исходный порядок из attr.list, только подменяем имена
-        if attr.list:
-            for item in attr.list:
-                code = str(item.get("data"))
-                if code in code_to_human:
-                    human = code_to_human[code]
-                    # обновляем как внутренние поля dict, так и атрибут Item.name
-                    item["name"] = human
-                    item["attrname"] = human
-                    try:
-                        setattr(item, "name", human)
-                    except Exception:
-                        pass
-        else:
-            new_items = []
-            for code, name in sorted(code_to_human.items(), key=lambda x: x[1]):
-                new_items.append({
-                    "data": str(code),
-                    "name": str(name),
-                    "attrname": str(name),
-                })
-            attr.list = new_items
+        # Игнорируем YAML и строим список заново из карты code->human
+        if code_to_human:
+            attr.list = [
+                {"data": str(code), "name": str(human), "attrname": str(human)}
+                for code, human in sorted(code_to_human.items(), key=lambda x: x[1])
+            ]
 
     def start_program(self) -> None:
         # просто отправляем текущее состояние как  command (commandName self.config.command_name)
