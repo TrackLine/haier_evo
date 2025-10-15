@@ -5,6 +5,7 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.const import TEMPERATURE
 from .const import DOMAIN
 from . import api
+from .logger import _LOGGER
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entities) -> bool:
@@ -12,6 +13,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entitie
     entities = []
     for device in haier_object.devices:
         entities.extend(device.create_entities_sensor())
+    _LOGGER.debug(f"sensor: {len(entities)} entities created")
     if entities:
         async_add_entities(entities)
         haier_object.write_ha_state()

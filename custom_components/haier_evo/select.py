@@ -3,6 +3,7 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.core import HomeAssistant
 from .const import DOMAIN
 from . import api
+from .logger import _LOGGER
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entities) -> bool:
@@ -10,6 +11,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entitie
     entities = []
     for device in haier_object.devices:
         entities.extend(device.create_entities_select())
+    _LOGGER.debug(f"select: {len(entities)} entities created")
     if entities:
         async_add_entities(entities)
         haier_object.write_ha_state()
