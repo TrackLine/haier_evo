@@ -447,43 +447,55 @@ class Haier(object):
         presentation = data.setdefault("presentation", {})
         layout = presentation.setdefault("layout", {})
         containers = layout.setdefault("scrollContainer", [])
-        for item in containers[:]:
-            tracking_data = item.setdefault("trackingData", {})
-            component = tracking_data.setdefault("component", {})
-            component_id = component.setdefault("componentId", "")
-            # _LOGGER.debug(component_id)
-            component_name = component.setdefault("componentName", "")
-            if not (
-                component_name == "deviceList"
-                and component_id == need_container_id
-            ):
-                containers.remove(item)
-                continue
-            state_data = item.setdefault("state", "{}")
-            state_json = item['state'] = (
-                json.loads(state_data)
-                if isinstance(state_data, str)
-                else state_data
-            )
-            devices = state_json.setdefault("items", [])
-            for d in devices:
-                device_title = d.get('title', '')
-                device_link = d.get('action', {}).get('link', '')
-                parsed_link = urlparse(device_link)
-                query_params = parse_qs(parsed_link.query)
-                device_type = query_params.setdefault('type', ['UNKNOWN'])[0]
-                device_mac = query_params.get('deviceId', [''])[0]
-                device_mac = device_mac.replace('%3A', ':')
-                device_serial = query_params.get('serialNum', [''])[0]
-                device = HaierDevice.create(
-                    haier=self,
-                    device_type=device_type,
-                    device_mac=device_mac,
-                    device_serial=device_serial,
-                    device_title=device_title,
+
+        def collect_from(items):
+            for item in items:
+                state_data = item.setdefault("state", "{}")
+                state_json = (
+                    json.loads(state_data)
+                    if isinstance(state_data, str)
+                    else state_data
                 )
-                self.devices.append(device)
-                _LOGGER.info(f"Added device: {device}")
+                devices = state_json.setdefault("items", [])
+                for d in devices:
+                    device_title = d.get('title', '')
+                    device_link = d.get('action', {}).get('link', '')
+                    parsed_link = urlparse(device_link)
+                    query_params = parse_qs(parsed_link.query)
+                    device_type = query_params.setdefault('type', ['UNKNOWN'])[0]
+                    device_mac = query_params.get('deviceId', [''])[0]
+                    device_mac = device_mac.replace('%3A', ':')
+                    device_serial = query_params.get('serialNum', [''])[0]
+                    device = HaierDevice.create(
+                        haier=self,
+                        device_type=device_type,
+                        device_mac=device_mac,
+                        device_serial=device_serial,
+                        device_title=device_title,
+                    )
+                    self.devices.append(device)
+                    _LOGGER.info(f"Added device: {device}")
+
+        # 1) Пытаемся найти точный контейнер
+        filtered = []
+        for item in containers:
+            component = item.setdefault("trackingData", {}).setdefault("component", {})
+            component_id = component.setdefault("componentId", "")
+            component_name = component.setdefault("componentName", "")
+            if component_name == "deviceList" and component_id == need_container_id:
+                filtered.append(item)
+        if filtered:
+            collect_from(filtered)
+        # 2) Фолбэк: если ничего не нашли, берём все deviceList-контейнеры
+        if not self.devices:
+            any_device_lists = []
+            for item in containers:
+                component = item.setdefault("trackingData", {}).setdefault("component", {})
+                if component.setdefault("componentName", "") == "deviceList":
+                    any_device_lists.append(item)
+            if any_device_lists:
+                _LOGGER.warning("Fallback to any deviceList containers (exact containerId not found)")
+                collect_from(any_device_lists)
         if len(self.devices) > 0:
             self.connect_in_thread()
 
