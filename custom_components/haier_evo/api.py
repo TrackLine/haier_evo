@@ -496,6 +496,43 @@ class Haier(object):
             if any_device_lists:
                 _LOGGER.warning("Fallback to any deviceList containers (exact containerId not found)")
                 collect_from(any_device_lists)
+        # 3) Последний фолбэк: рекурсивный поиск action.link с deviceId/serialNum/type по всему ответу
+        if not self.devices:
+            def walk_links(node):
+                if isinstance(node, dict):
+                    link = (((node.get("action") or {}).get("link")) or None)
+                    if isinstance(link, str) and ("deviceId=" in link or "serialNum=" in link) and "type=" in link:
+                        return [link]
+                    result = []
+                    for v in node.values():
+                        result.extend(walk_links(v))
+                    return result
+                elif isinstance(node, list):
+                    result = []
+                    for v in node:
+                        result.extend(walk_links(v))
+                    return result
+                return []
+
+            links = walk_links(data)
+            for device_link in links:
+                parsed_link = urlparse(device_link)
+                query_params = parse_qs(parsed_link.query)
+                device_type = query_params.setdefault('type', ['UNKNOWN'])[0]
+                device_mac = (query_params.get('deviceId', [''])[0] or '').replace('%3A', ':')
+                device_serial = query_params.get('serialNum', [''])[0]
+                device_title = query_params.get('title', [''])[0]
+                if not device_mac:
+                    continue
+                device = HaierDevice.create(
+                    haier=self,
+                    device_type=device_type,
+                    device_mac=device_mac,
+                    device_serial=device_serial,
+                    device_title=device_title or device_type,
+                )
+                self.devices.append(device)
+                _LOGGER.info(f"Added device (fallback link): {device}")
         if len(self.devices) > 0:
             self.connect_in_thread()
 
