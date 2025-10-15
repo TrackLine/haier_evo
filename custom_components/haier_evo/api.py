@@ -1398,9 +1398,28 @@ class HaierWM(HaierDevice):
     def config(self) -> CFG.HaierWMConfig:
         return self._config
 
+    def _get_status(self, data: dict) -> dict:
+        raw = data or {}
+        control = raw.get("smartDeviceControl", {})
+        self._status_data = raw
+        info = control.get("info", {})
+        self.device_serial = info.get("serialNumber", self.device_serial)
+        device_model = info.get("model", "WM")
+        device_model = device_model.replace('-', '').replace('/', '')[:11]
+        self.device_model = device_model
+        self.available = raw.get("status") or control.get("status", "ONLINE")
+        settings = control.get("settings", {})
+        self.device_name = ((settings.get("name") or {}).get("name")) or self.device_name
+        self.sw_version = ((settings.get("firmware") or {}).get("value")) or self.sw_version
+        # read config and current values
+        self._load_config_from_attributes(raw)
+        self.write_ha_state()
+        return raw
+
     def _load_config_from_attributes(self, data: dict) -> None:
         self._config = CFG.HaierWMConfig(self.device_model, self.hass.config.path(C.DOMAIN))
-        attributes = data.setdefault("attributes", [])
+        control = data.get("smartDeviceControl", {})
+        attributes = control.get("attributes", [])
         attrs = list(sorted(map(lambda x: CFG.Attribute(x), attributes), key=lambda x: x.code))
         for attr in attrs:
             self.config.attrs.append(attr)
@@ -1412,6 +1431,8 @@ class HaierWM(HaierDevice):
             _LOGGER.debug(f"WM program names mapping skipped: {e}")
         for attr in self.config.attrs:
             self._set_attribute_value(str(attr.code), attr.current)
+        # Расширяем constraint из control.constraint
+        self.constraint.extend(control.get("constraint", []))
 
     def _set_attribute_value(self, code: str, value: str) -> None:
         attr = self.config.get_attr_by_code(code)
