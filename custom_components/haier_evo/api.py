@@ -1493,14 +1493,38 @@ class HaierWM(HaierDevice):
         attr = self.config.get_attr_by_name("program")
         if not attr:
             return
-        new_items = []
-        for code, name in sorted(code_to_human.items(), key=lambda x: x[1]):
-            new_items.append({
-                "data": str(code),
-                "name": str(name),
-                "attrname": str(name),
-            })
-        attr.list = new_items
+        # Сохраняем исходный порядок из attr.list, только подменяем имена
+        if attr.list:
+            for item in attr.list:
+                code = str(item.get("data"))
+                if code in code_to_human:
+                    item["name"] = code_to_human[code]
+                    item["attrname"] = code_to_human[code]
+        else:
+            new_items = []
+            for code, name in sorted(code_to_human.items(), key=lambda x: x[1]):
+                new_items.append({
+                    "data": str(code),
+                    "name": str(name),
+                    "attrname": str(name),
+                })
+            attr.list = new_items
+
+    def start_program(self) -> None:
+        # просто отправляем текущее состояние как group command (commandName self.config.command_name)
+        # минимально — меняем статус/режим через рабочий набор атрибутов, если требуется
+        commands = []
+        program_attr = self.config.get_attr_by_name("program")
+        if program_attr and program_attr.current is not None:
+            commands.append({"commandName": str(program_attr.code), "value": str(program_attr.current)})
+        temp_attr = self.config.get_attr_by_name("temperature")
+        if temp_attr and temp_attr.current is not None:
+            commands.append({"commandName": str(temp_attr.code), "value": str(temp_attr.current)})
+        spin_attr = self.config.get_attr_by_name("spin_speed")
+        if spin_attr and spin_attr.current is not None:
+            commands.append({"commandName": str(spin_attr.code), "value": str(spin_attr.current)})
+        if commands:
+            self._send_commands(commands)
 
     # options
     def get_program_options(self) -> list[str]:
@@ -1545,6 +1569,10 @@ class HaierWM(HaierDevice):
         if self.config['remaining_minutes'] is not None:
             entities.append(sensor.HaierWMRemainingMinutesSensor(self))
         return entities
+
+    def create_entities_button(self) -> list:
+        from . import button
+        return [button.HaierWMStartButton(self)]
 
 def parsebool(value) -> bool:
     if value in ("on", 1, True, "true", "enable", "1"):
