@@ -75,4 +75,32 @@ attributes:
         value: "1600"
   - name: remaining_minutes
     id: "32"
+  - name: remaining_hours
+    id: "31"
+  - name: rinse_count
+    id: "124"
+    mappings:
+      - haier: "0"
+        value: "0"
+      - haier: "1"
+        value: "1"
+      - haier: "2"
+        value: "2"
+      - haier: "3"
+        value: "3"
+      - haier: "4"
+        value: "4"
+      - haier: "5"
+        value: "5"
+  - name: steam
+    id: "7"
+    mappings:
+      - haier: "true"
+        value: "on"
+      - haier: "false"
+        value: "off"
+  - name: delayed_hours
+    id: "125"
+  - name: program_duration
+    id: "90"
 

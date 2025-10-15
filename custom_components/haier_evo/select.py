@@ -119,3 +119,26 @@ class HaierWMSpinSpeedSelect(HaierSelect):
         self._attr_unique_id = f"{device.device_id}_{device.device_model}_spin_speed"
         self._attr_name = f"{device.device_name} Отжим"
         self._attr_options = device.get_spin_speed_options()
+
+
+class HaierWMRinseCountSelect(HaierSelect):
+
+    def __init__(self, device: api.HaierWM) -> None:
+        super().__init__(device)
+        self._device_attr_name = "rinse_count"
+        self._attr_unique_id = f"{device.device_id}_{device.device_model}_rinse_count"
+        self._attr_name = f"{device.device_name} Полоскания"
+        self._attr_options = device.get_rinse_count_options()
+
+
+class HaierWMDelayedFinishSelect(HaierSelect):
+
+    def __init__(self, device: api.HaierWM) -> None:
+        super().__init__(device)
+        self._device_attr_name = "delayed_hours"
+        self._attr_unique_id = f"{device.device_id}_{device.device_model}_delayed_finish"
+        self._attr_name = f"{device.device_name} Планируемое завершение (ч)"
+        # фиксированный список значений 0..24 с шагом 0.5 можно подменить динамически из businessAttributes
+        self._attr_options = [
+            str(v/2).rstrip('0').rstrip('.') for v in range(0, 49)
+        ]

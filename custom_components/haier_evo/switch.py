@@ -147,6 +147,15 @@ class HaierREFSuperCoolingSwitch(HaierSwitch):
         self._attr_name = f"{device.device_name} Супер-охлаждение"
 
 
+class HaierWMSteamSwitch(HaierSwitch):
+
+    def __init__(self, device: api.HaierWM) -> None:
+        super().__init__(device)
+        self._device_attr_name = "steam"
+        self._attr_unique_id = f"{device.device_id}_{device.device_model}_steam"
+        self._attr_name = f"{device.device_name} Пар"
+
+
 class HaierREFSuperFreezeSwitch(HaierSwitch):
 
     def __init__(self, device: api.HaierREF) -> None:

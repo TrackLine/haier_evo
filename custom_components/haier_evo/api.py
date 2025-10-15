@@ -1332,12 +1332,17 @@ class HaierREF(HaierDevice):
     def create_entities_switch(self) -> list:
         from . import switch
         entities = []
-        if self.config['super_cooling'] is not None:
-            entities.append(switch.HaierREFSuperCoolingSwitch(self))
-        if self.config['super_freeze'] is not None:
-            entities.append(switch.HaierREFSuperFreezeSwitch(self))
-        if self.config['vacation_mode'] is not None:
-            entities.append(switch.HaierREFVacationSwitch(self))
+        if getattr(self.config, '__class__', None).__name__ == 'HaierREFConfig':
+            if self.config['super_cooling'] is not None:
+                entities.append(switch.HaierREFSuperCoolingSwitch(self))
+            if self.config['super_freeze'] is not None:
+                entities.append(switch.HaierREFSuperFreezeSwitch(self))
+            if self.config['vacation_mode'] is not None:
+                entities.append(switch.HaierREFVacationSwitch(self))
+            return entities
+        # WM
+        if self.config['steam'] is not None:
+            entities.append(switch.HaierWMSteamSwitch(self))
         return entities
 
     def create_entities_select(self) -> list:
@@ -1392,6 +1397,8 @@ class HaierWM(HaierDevice):
         self.temperature = None
         self.spin_speed = None
         self.remaining_minutes = 0
+        self.remaining_hours = 0
+        self.status_text = None
         self._get_status(backend_data)
 
     @property
@@ -1449,6 +1456,23 @@ class HaierWM(HaierDevice):
                 self.remaining_minutes = int(value)
             except Exception:
                 pass
+        elif attr.name == "remaining_hours":
+            try:
+                self.remaining_hours = int(value)
+            except Exception:
+                pass
+        elif attr.name == "program_duration":
+            try:
+                # поле 90 приходит в секундах/минутах в разных моделях, оставим как есть
+                self.program_duration = int(value)
+            except Exception:
+                pass
+        elif attr.name == "steam":
+            # keep current via item name mapping
+            pass
+        # compute status heuristically
+        total = self.remaining_total_minutes
+        self.status_text = "running" if total > 0 else "idle"
 
     def _augment_program_names(self, data: dict) -> None:
         # Собираем отображение washType -> русское имя из раздела allProgram (preview.name)
@@ -1523,8 +1547,25 @@ class HaierWM(HaierDevice):
         spin_attr = self.config.get_attr_by_name("spin_speed")
         if spin_attr and spin_attr.current is not None:
             commands.append({"commandName": str(spin_attr.code), "value": str(spin_attr.current)})
+        rinse_attr = self.config.get_attr_by_name("rinse_count")
+        if rinse_attr and rinse_attr.current is not None:
+            commands.append({"commandName": str(rinse_attr.code), "value": str(rinse_attr.current)})
+        delay_attr = self.config.get_attr_by_name("delayed_hours")
+        if delay_attr and delay_attr.current is not None:
+            commands.append({"commandName": str(delay_attr.code), "value": str(delay_attr.current)})
         if commands:
             self._send_commands(commands)
+
+    def pause_program(self) -> None:
+        # У некоторых моделей пауза реализуется командой 15/stopCurrentAlarm/и т.п.
+        command = self.config.get_command_by_name('pause')
+        if command:
+            self._send_single_command(command[0])
+
+    def cancel_program(self) -> None:
+        command = self.config.get_command_by_name('cancel')
+        if command:
+            self._send_single_command(command[0])
 
     # options
     def get_program_options(self) -> list[str]:
@@ -1535,6 +1576,21 @@ class HaierWM(HaierDevice):
 
     def get_spin_speed_options(self) -> list[str]:
         return self.config.get_values('spin_speed')
+
+    def get_rinse_count_options(self) -> list[str]:
+        return self.config.get_values('rinse_count')
+
+    def set_delayed_hours(self, value: str) -> None:
+        # value ожидается как строка вида '0', '0.5', '1', ..., переведем в минуты/коды если потребуется
+        attr = self.config.get_attr_by_name('delayed_hours')
+        if attr is None:
+            return
+        minutes = value
+        if commands := self.constraint.apply([{
+            "commandName": str(attr.code),
+            "value": str(minutes),
+        }]):
+            self._send_commands(commands)
 
     # setters
     def set_program(self, value: str) -> None:
@@ -1552,6 +1608,10 @@ class HaierWM(HaierDevice):
             self._send_single_command(commands[0])
             self.spin_speed = value
 
+    def set_rinse_count(self, value: str) -> None:
+        if commands := self.get_commands("rinse_count", value):
+            self._send_single_command(commands[0])
+
     def create_entities_select(self) -> list:
         from . import select
         entities = []
@@ -1561,18 +1621,37 @@ class HaierWM(HaierDevice):
             entities.append(select.HaierWMTemperatureSelect(self))
         if self.config['spin_speed'] is not None:
             entities.append(select.HaierWMSpinSpeedSelect(self))
+        if self.config['rinse_count'] is not None:
+            entities.append(select.HaierWMRinseCountSelect(self))
+        if self.config['delayed_hours'] is not None:
+            entities.append(select.HaierWMDelayedFinishSelect(self))
         return entities
 
     def create_entities_sensor(self) -> list:
         from . import sensor
         entities = []
         if self.config['remaining_minutes'] is not None:
-            entities.append(sensor.HaierWMRemainingMinutesSensor(self))
+            entities.append(sensor.HaierWMRemainingTimeSensor(self))
+        # статус
+        entities.append(sensor.HaierWMStatusSensor(self))
+        if self.config['program_duration'] is not None:
+            entities.append(sensor.HaierWMProgramDurationSensor(self))
         return entities
 
     def create_entities_button(self) -> list:
         from . import button
-        return [button.HaierWMStartButton(self)]
+        return [
+            button.HaierWMStartButton(self),
+            button.HaierWMPauseButton(self),
+            button.HaierWMCancelButton(self),
+        ]
+
+    @property
+    def remaining_total_minutes(self) -> int:
+        try:
+            return max(0, int(self.remaining_hours) * 60 + int(self.remaining_minutes))
+        except Exception:
+            return int(self.remaining_minutes or 0)
 
 def parsebool(value) -> bool:
     if value in ("on", 1, True, "true", "enable", "1"):

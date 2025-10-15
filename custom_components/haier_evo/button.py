@@ -40,3 +40,29 @@ class HaierWMStartButton(HaierButton):
         await self.hass.async_add_executor_job(self._device.start_program)
 
 
+class HaierWMPauseButton(HaierButton):
+    _attr_icon = "mdi:pause-circle"
+
+    def __init__(self, device: api.HaierWM) -> None:
+        super().__init__(device)
+        self._attr_unique_id = f"{device.device_id}_{device.device_model}_pause"
+        self._attr_name = f"{device.device_name} Пауза"
+        self._device = device
+
+    async def async_press(self) -> None:
+        await self.hass.async_add_executor_job(self._device.pause_program)
+
+
+class HaierWMCancelButton(HaierButton):
+    _attr_icon = "mdi:stop-circle"
+
+    def __init__(self, device: api.HaierWM) -> None:
+        super().__init__(device)
+        self._attr_unique_id = f"{device.device_id}_{device.device_model}_cancel"
+        self._attr_name = f"{device.device_name} Отмена"
+        self._device = device
+
+    async def async_press(self) -> None:
+        await self.hass.async_add_executor_job(self._device.cancel_program)
+
+

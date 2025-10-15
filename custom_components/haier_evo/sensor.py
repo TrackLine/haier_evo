@@ -92,11 +92,39 @@ class HaierREFFreezerModeSensor(HaierREFFridgeModeSensor):
         self._attr_name = f"{device.device_name} Режим морозильной камеры"
 
 
-class HaierWMRemainingMinutesSensor(HaierSensor):
+class HaierWMRemainingTimeSensor(HaierSensor):
     _attr_icon = "mdi:timer-outline"
 
     def __init__(self, device: api.HaierWM):
         super().__init__(device)
-        self._device_attr_name = "remaining_minutes"
-        self._attr_unique_id = f"{device.device_id}_{device.device_model}_remaining_minutes"
-        self._attr_name = f"{device.device_name} Осталось минут"
+        self._device_attr_name = "remaining_total_minutes"
+        self._attr_unique_id = f"{device.device_id}_{device.device_model}_remaining_time"
+        self._attr_name = f"{device.device_name} Осталось (мин)"
+
+    @property
+    def native_value(self) -> float:
+        return getattr(self._device, self._device_attr_name, 0)
+
+
+class HaierWMStatusSensor(HaierSensor):
+    _attr_icon = "mdi:washing-machine"
+
+    def __init__(self, device: api.HaierWM):
+        super().__init__(device)
+        self._device_attr_name = "status_text"
+        self._attr_unique_id = f"{device.device_id}_{device.device_model}_status"
+        self._attr_name = f"{device.device_name} Статус"
+
+    @property
+    def native_value(self) -> float:
+        return getattr(self._device, self._device_attr_name, "idle")
+
+
+class HaierWMProgramDurationSensor(HaierSensor):
+    _attr_icon = "mdi:clock-outline"
+
+    def __init__(self, device: api.HaierWM):
+        super().__init__(device)
+        self._device_attr_name = "program_duration"
+        self._attr_unique_id = f"{device.device_id}_{device.device_model}_program_duration"
+        self._attr_name = f"{device.device_name} Длительность программы (мин)"
