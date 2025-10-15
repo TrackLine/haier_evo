@@ -88,3 +88,13 @@ class HaierREFFreezerModeSensor(HaierREFFridgeModeSensor):
         self._device_attr_name = "freezer_mode"
         self._attr_unique_id = f"{device.device_id}_{device.device_model}_freezer_mode"
         self._attr_name = f"{device.device_name} Режим морозильной камеры"
+
+
+class HaierWMRemainingMinutesSensor(HaierSensor):
+    _attr_icon = "mdi:timer-outline"
+
+    def __init__(self, device: api.HaierWM):
+        super().__init__(device)
+        self._device_attr_name = "remaining_minutes"
+        self._attr_unique_id = f"{device.device_id}_{device.device_model}_remaining_minutes"
+        self._attr_name = f"{device.device_name} Осталось минут"

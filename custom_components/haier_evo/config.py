@@ -208,6 +208,19 @@ class HaierREFConfig(HaierDeviceConfig):
         )
 
 
+class HaierWMConfig(HaierDeviceConfig):
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"command_name={self.command_name!r},"
+            f"program={self['program']!r},"
+            f"temperature={self['temperature']!r},"
+            f"spin_speed={self['spin_speed']!r},"
+            f"remaining_minutes={self['remaining_minutes']!r}"
+            f")"
+        )
+
 class Attribute(dict):
 
     def __init__(self, data: dict) -> None:

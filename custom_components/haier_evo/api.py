@@ -800,6 +800,7 @@ class HaierDevice(object):
         device_cls = {
             "AC": HaierAC,
             "REF": HaierREF,
+            "WM": HaierWM,
         }.get(device_type, cls)
         if device_cls is cls:
             _LOGGER.warning(f"Unknown device type: {device_type}")
@@ -1329,6 +1330,151 @@ class HaierREF(HaierDevice):
             entities.append(binary_sensor.HaierREFDoorSensor(self))
         return entities
 
+
+class HaierWM(HaierDevice):
+
+    def __init__(
+        self,
+        backend_data: dict = None,
+        **kwargs
+    ) -> None:
+        super().__init__(**kwargs)
+        self.program = None
+        self.temperature = None
+        self.spin_speed = None
+        self.remaining_minutes = 0
+        self._get_status(backend_data)
+
+    @property
+    def config(self) -> CFG.HaierWMConfig:
+        return self._config
+
+    def _load_config_from_attributes(self, data: dict) -> None:
+        self._config = CFG.HaierWMConfig(self.device_model, self.hass.config.path(C.DOMAIN))
+        attributes = data.setdefault("attributes", [])
+        attrs = list(sorted(map(lambda x: CFG.Attribute(x), attributes), key=lambda x: x.code))
+        for attr in attrs:
+            self.config.attrs.append(attr)
+        self.config.merge_attributes()
+        # Обновляем список программ человекочитаемыми именами из allProgram/businessAttributes
+        try:
+            self._augment_program_names(data)
+        except Exception as e:
+            _LOGGER.debug(f"WM program names mapping skipped: {e}")
+        for attr in self.config.attrs:
+            self._set_attribute_value(str(attr.code), attr.current)
+
+    def _set_attribute_value(self, code: str, value: str) -> None:
+        attr = self.config.get_attr_by_code(code)
+        if not (attr and value is not None):
+            return
+        elif attr.name == "program":
+            self.program = attr.get_item_name(value)
+        elif attr.name == "temperature":
+            self.temperature = attr.get_item_name(value) or value
+        elif attr.name == "spin_speed":
+            self.spin_speed = attr.get_item_name(value) or value
+        elif attr.name == "remaining_minutes":
+            try:
+                self.remaining_minutes = int(value)
+            except Exception:
+                pass
+
+    def _augment_program_names(self, data: dict) -> None:
+        # Собираем отображение washType -> русское имя из раздела allProgram (preview.name)
+        wash_to_human: dict[str, str] = {}
+
+        def walk_collect(node):
+            if isinstance(node, dict):
+                programs = node.get("programs")
+                if isinstance(programs, list):
+                    for p in programs:
+                        link = (((p.get("programConfig") or {}).get("link") or {}).get("name"))
+                        human = ((p.get("preview") or {}).get("name"))
+                        if link and human:
+                            wash_to_human[str(link)] = str(human)
+                for v in node.values():
+                    walk_collect(v)
+            elif isinstance(node, list):
+                for v in node:
+                    walk_collect(v)
+
+        walk_collect(data)
+
+        # Собираем код программы (attr name "0") -> русское имя
+        code_to_human: dict[str, str] = {}
+        for item in data.get("businessAttributes", []) or []:
+            wash_name = str(item.get("name") or "")
+            attrs = (((item.get("commandParameters") or {}).get("attrNameList") or []))
+            program_attr = next((a for a in attrs if str(a.get("name")) == "0"), None)
+            program_code = str(program_attr.get("defaultValue")) if program_attr else None
+            if not program_code or program_code in ("", "None", "null"):
+                continue
+            human_name = wash_to_human.get(wash_name)
+            if not human_name and wash_name == "refresh":
+                human_name = "Освежить"
+            if human_name:
+                code_to_human[program_code] = human_name
+
+        if not code_to_human:
+            return
+
+        # Обновляем список значений у атрибута program
+        attr = self.config.get_attr_by_name("program")
+        if not attr:
+            return
+        new_items = []
+        for code, name in sorted(code_to_human.items(), key=lambda x: x[1]):
+            new_items.append({
+                "data": str(code),
+                "name": str(name),
+                "attrname": str(name),
+            })
+        attr.list = new_items
+
+    # options
+    def get_program_options(self) -> list[str]:
+        return self.config.get_values('program')
+
+    def get_temperature_options(self) -> list[str]:
+        return self.config.get_values('temperature')
+
+    def get_spin_speed_options(self) -> list[str]:
+        return self.config.get_values('spin_speed')
+
+    # setters
+    def set_program(self, value: str) -> None:
+        if commands := self.get_commands("program", value):
+            self._send_single_command(commands[0])
+            self.program = value
+
+    def set_temperature(self, value: str) -> None:
+        if commands := self.get_commands("temperature", value):
+            self._send_single_command(commands[0])
+            self.temperature = value
+
+    def set_spin_speed(self, value: str) -> None:
+        if commands := self.get_commands("spin_speed", value):
+            self._send_single_command(commands[0])
+            self.spin_speed = value
+
+    def create_entities_select(self) -> list:
+        from . import select
+        entities = []
+        if self.config['program'] is not None:
+            entities.append(select.HaierWMProgramSelect(self))
+        if self.config['temperature'] is not None:
+            entities.append(select.HaierWMTemperatureSelect(self))
+        if self.config['spin_speed'] is not None:
+            entities.append(select.HaierWMSpinSpeedSelect(self))
+        return entities
+
+    def create_entities_sensor(self) -> list:
+        from . import sensor
+        entities = []
+        if self.config['remaining_minutes'] is not None:
+            entities.append(sensor.HaierWMRemainingMinutesSensor(self))
+        return entities
 
 def parsebool(value) -> bool:
     if value in ("on", 1, True, "true", "enable", "1"):
