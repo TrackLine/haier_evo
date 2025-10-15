@@ -1440,6 +1440,14 @@ class HaierWM(HaierDevice):
             self._set_attribute_value(str(attr.code), attr.current)
         # Расширяем constraint из control.constraint
         self.constraint.extend(control.get("constraint", []))
+        # Лог текущего списка программ для отладки
+        prog = self.config.get_attr_by_name("program")
+        if prog:
+            try:
+                names = [getattr(i, "name", None) or i.get("name") for i in prog.list]
+                _LOGGER.debug(f"WM program options: {names}")
+            except Exception:
+                pass
 
     def _set_attribute_value(self, code: str, value: str) -> None:
         attr = self.config.get_attr_by_code(code)
@@ -1522,8 +1530,14 @@ class HaierWM(HaierDevice):
             for item in attr.list:
                 code = str(item.get("data"))
                 if code in code_to_human:
-                    item["name"] = code_to_human[code]
-                    item["attrname"] = code_to_human[code]
+                    human = code_to_human[code]
+                    # обновляем как внутренние поля dict, так и атрибут Item.name
+                    item["name"] = human
+                    item["attrname"] = human
+                    try:
+                        setattr(item, "name", human)
+                    except Exception:
+                        pass
         else:
             new_items = []
             for code, name in sorted(code_to_human.items(), key=lambda x: x[1]):
