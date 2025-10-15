@@ -1549,7 +1549,7 @@ class HaierWM(HaierDevice):
             attr.list = new_items
 
     def start_program(self) -> None:
-        # просто отправляем текущее состояние как group command (commandName self.config.command_name)
+        # просто отправляем текущее состояние как  command (commandName self.config.command_name)
         # минимально — меняем статус/режим через рабочий набор атрибутов, если требуется
         commands = []
         program_attr = self.config.get_attr_by_name("program")
